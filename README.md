@@ -11,6 +11,12 @@ go install github.com/Duke-ECE/managed-agents-cli/cmd/managed-agents@latest
 managed-agents help
 ```
 
+If a configured Go mirror cannot verify the new module, use the official proxy for installation:
+
+```sh
+GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org go install github.com/Duke-ECE/managed-agents-cli/cmd/managed-agents@latest
+```
+
 During development, use `go run ./cmd/managed-agents <command>` from this repository. The source repository has no tagged release yet; `go install ...@latest` becomes useful after the first pushed commit.
 
 ## Sign in

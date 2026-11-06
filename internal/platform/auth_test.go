@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -135,6 +136,25 @@ func TestFileStoreRejectsLoosePermissions(t *testing.T) {
 	}
 	if _, err := store.Load(); err == nil || !strings.Contains(err.Error(), "readable by other users") {
 		t.Fatalf("expected permission error, got %v", err)
+	}
+}
+
+func TestKeychainStoreRoundTrip(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS Keychain only")
+	}
+	store := KeychainStore{Service: "managed-agents-cli-test-" + strconv.FormatInt(time.Now().UnixNano(), 10)}
+	defer store.Delete()
+	session := Session{AccessToken: "test-access", RefreshToken: "test-refresh", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := store.Save(session); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AccessToken != session.AccessToken || got.RefreshToken != session.RefreshToken {
+		t.Fatalf("Keychain round trip failed: %+v", got)
 	}
 }
 

@@ -35,12 +35,19 @@ func DefaultStore() (Store, error) {
 	return FileStore{Path: filepath.Join(dir, "managed-agents", "session.json")}, nil
 }
 
-type KeychainStore struct{}
+type KeychainStore struct{ Service string }
 
 const keychainService = "managed-agents-cli"
 
-func (KeychainStore) Load() (Session, error) {
-	data, err := exec.Command("security", "find-generic-password", "-a", "default", "-s", keychainService, "-w").Output()
+func (s KeychainStore) service() string {
+	if s.Service != "" {
+		return s.Service
+	}
+	return keychainService
+}
+
+func (s KeychainStore) Load() (Session, error) {
+	data, err := exec.Command("security", "find-generic-password", "-a", "default", "-s", s.service(), "-w").Output()
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && exit.ExitCode() == 44 {
@@ -55,22 +62,23 @@ func (KeychainStore) Load() (Session, error) {
 	return session, nil
 }
 
-func (KeychainStore) Save(session Session) error {
+func (s KeychainStore) Save(session Session) error {
 	data, err := json.Marshal(session)
 	if err != nil {
 		return err
 	}
-	// security accepts the value as an argument; it is never logged or written
-	// to the repository. macOS stores it as a login-keychain generic password.
-	cmd := exec.Command("security", "add-generic-password", "-U", "-a", "default", "-s", keychainService, "-w", string(data))
+	// With -w last, security reads and confirms the value on stdin. This keeps
+	// the session out of process arguments and shell history.
+	cmd := exec.Command("security", "add-generic-password", "-U", "-a", "default", "-s", s.service(), "-w")
+	cmd.Stdin = strings.NewReader(string(data) + "\n" + string(data) + "\n")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("save session to Keychain: %w", err)
 	}
 	return nil
 }
 
-func (KeychainStore) Delete() error {
-	cmd := exec.Command("security", "delete-generic-password", "-a", "default", "-s", keychainService)
+func (s KeychainStore) Delete() error {
+	cmd := exec.Command("security", "delete-generic-password", "-a", "default", "-s", s.service())
 	if err := cmd.Run(); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && exit.ExitCode() == 44 {
