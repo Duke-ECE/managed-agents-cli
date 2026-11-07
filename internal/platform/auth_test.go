@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,23 @@ import (
 type memoryStore struct {
 	session Session
 	exists  bool
+}
+
+type disappearingStore struct{}
+
+func (disappearingStore) Load() (Session, error) { return Session{}, os.ErrNotExist }
+func (disappearingStore) Save(Session) error     { return nil }
+func (disappearingStore) Delete() error          { return nil }
+
+func TestLoginRejectsSessionThatCannotBeReadBack(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"access_token":"access","refresh_token":"refresh","expires_in":3600}`))
+	}))
+	defer server.Close()
+	auth := Auth{Config: Config{SupabaseURL: server.URL}, Store: disappearingStore{}}
+	if err := auth.LoginPassword(context.Background(), "user@example.com", "password"); err == nil || !strings.Contains(err.Error(), "could not be read back") {
+		t.Fatalf("expected credential storage error, got %v", err)
+	}
 }
 
 func (s *memoryStore) Load() (Session, error) {
@@ -68,6 +86,7 @@ func TestBrowserLoginUsesPKCEAndStoresSession(t *testing.T) {
 	store := &memoryStore{}
 	auth := Auth{Config: Config{SupabaseURL: server.URL, AnonKey: "public-test", CallbackURL: callback}, Store: store}
 	var challenge string
+	callbackChecked := make(chan struct{})
 	err = auth.LoginBrowser(context.Background(), func(authorize string) error {
 		u, err := url.Parse(authorize)
 		if err != nil {
@@ -78,10 +97,21 @@ func TestBrowserLoginUsesPKCEAndStoresSession(t *testing.T) {
 		}
 		challenge = u.Query().Get("code_challenge")
 		go func() {
+			defer close(callbackChecked)
 			response, err := http.Get(callback + "/?code=one-time-code")
 			if err != nil {
 				t.Error(err)
 				return
+			}
+			if response.Header.Get("Content-Type") != "text/html; charset=utf-8" || response.Header.Get("Cache-Control") != "no-store" {
+				t.Error("callback response is not a private HTML page")
+			}
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Error(err)
+			}
+			if !strings.Contains(string(body), "window.close()") || !strings.Contains(string(body), "history.replaceState") || strings.Contains(string(body), "one-time-code") {
+				t.Error("callback page must hide the code and try to close its tab")
 			}
 			response.Body.Close()
 		}()
@@ -90,6 +120,7 @@ func TestBrowserLoginUsesPKCEAndStoresSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	<-callbackChecked
 	sum := sha256.Sum256([]byte(verifier))
 	if challenge != base64.RawURLEncoding.EncodeToString(sum[:]) {
 		t.Error("PKCE challenge does not match verifier")
@@ -119,6 +150,9 @@ func TestAccessTokenRefreshesExpiredSession(t *testing.T) {
 }
 
 func TestFileStoreRejectsLoosePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows uses profile ACLs instead of POSIX file permissions")
+	}
 	path := filepath.Join(t.TempDir(), "credentials.json")
 	store := FileStore{Path: path}
 	if err := store.Save(Session{AccessToken: "a", RefreshToken: "r", ExpiresAt: time.Now()}); err != nil {
@@ -139,13 +173,9 @@ func TestFileStoreRejectsLoosePermissions(t *testing.T) {
 	}
 }
 
-func TestKeychainStoreRoundTrip(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("macOS Keychain only")
-	}
-	store := KeychainStore{Service: "managed-agents-cli-test-" + strconv.FormatInt(time.Now().UnixNano(), 10)}
-	defer store.Delete()
-	session := Session{AccessToken: "test-access", RefreshToken: "test-refresh", ExpiresAt: time.Now().Add(time.Hour)}
+func TestFileStoreRoundTripWithLongTokens(t *testing.T) {
+	store := FileStore{Path: filepath.Join(t.TempDir(), "managed-agents", "session.json")}
+	session := Session{AccessToken: strings.Repeat("test-access", 300), RefreshToken: strings.Repeat("test-refresh", 100), ExpiresAt: time.Now().Add(time.Hour)}
 	if err := store.Save(session); err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +184,25 @@ func TestKeychainStoreRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.AccessToken != session.AccessToken || got.RefreshToken != session.RefreshToken {
-		t.Fatalf("Keychain round trip failed: %+v", got)
+		t.Fatal("file round trip changed the session tokens")
+	}
+}
+
+func TestDefaultStoreUsesHiddenHomeDirectory(t *testing.T) {
+	store, err := DefaultStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, ok := store.(FileStore)
+	if !ok {
+		t.Fatalf("default store type = %T, want FileStore", store)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(home, ".managed-agents", "session.json"); file.Path != want {
+		t.Fatalf("session path = %q, want %q", file.Path, want)
 	}
 }
 

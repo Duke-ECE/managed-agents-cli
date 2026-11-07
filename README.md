@@ -4,12 +4,14 @@ A Go command-line client for [Managed Agents](https://managed-agents.colab.duke.
 
 ## Install
 
-Requires Go 1.25 or newer. The initial release is built from source:
+Install with Go 1.25 or newer:
 
 ```sh
 go install github.com/Duke-ECE/managed-agents-cli/cmd/managed-agents@latest
 managed-agents help
 ```
+
+Prebuilt macOS, Linux, and Windows binaries are available on the [Releases page](https://github.com/Duke-ECE/managed-agents-cli/releases). Verify the archive against `SHA256SUMS` before installing it.
 
 If a configured Go mirror cannot verify the new module, use the official proxy for installation:
 
@@ -17,7 +19,7 @@ If a configured Go mirror cannot verify the new module, use the official proxy f
 GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org go install github.com/Duke-ECE/managed-agents-cli/cmd/managed-agents@latest
 ```
 
-During development, use `go run ./cmd/managed-agents <command>` from this repository. The source repository has no tagged release yet; `go install ...@latest` becomes useful after the first pushed commit.
+During development, use `go run ./cmd/managed-agents <command>` from this repository.
 
 ## Sign in
 
@@ -26,7 +28,7 @@ managed-agents login
 managed-agents whoami
 ```
 
-`login` opens GitHub OAuth in your browser. The CLI listens on `http://localhost:5173` for the one-time Supabase PKCE callback; that exact URL is already allow-listed for the platform. Close any Vite preview or other process using port 5173 before logging in. The CLI exchanges the code for a user session and stores it in macOS Keychain. The browser does not hand its existing console session to the CLI; it performs a separate sign-in.
+`login` opens GitHub OAuth in your browser. The CLI listens on `http://localhost:5173` for the one-time Supabase PKCE callback; that exact URL is already allow-listed for the platform. Close any Vite preview or other process using port 5173 before logging in. The callback page tries to close itself after authorization; if the browser blocks this, close the tab manually. The CLI exchanges the code for a user session and saves it in a hidden directory under your home folder. The browser does not hand its existing console session to the CLI; it performs a separate sign-in.
 
 For an account with an email password:
 
@@ -34,7 +36,7 @@ For an account with an email password:
 managed-agents login --email you@example.com
 ```
 
-The password is read without echo on an interactive terminal and is not stored. User access and refresh tokens are stored in Keychain on macOS. On Linux and other non-macOS hosts, they are stored in a mode-0600 file under the user's config directory. `logout` revokes the current CLI refresh token when possible and removes local credentials. It does not sign out browser sessions.
+The password is read without echo on an interactive terminal and is not stored. The access and refresh tokens are stored in `~/.managed-agents/session.json` (`~` means the OS user home directory). On macOS and Linux, the CLI creates the directory with mode `0700` and the file with mode `0600`; Windows uses the user profile ACL. `logout` revokes the current CLI refresh token when possible and removes the file. It does not sign out browser sessions. After upgrading from an older Keychain or config-directory build, run `managed-agents login` once to create the new file-based session.
 
 ## Commands
 

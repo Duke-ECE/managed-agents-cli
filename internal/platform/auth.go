@@ -76,7 +76,21 @@ func (a Auth) LoginPassword(ctx context.Context, email, password string) error {
 	if err != nil {
 		return err
 	}
-	return a.Store.Save(session)
+	return a.saveSession(session)
+}
+
+func (a Auth) saveSession(session Session) error {
+	if err := a.Store.Save(session); err != nil {
+		return err
+	}
+	stored, err := a.Store.Load()
+	if err != nil {
+		return fmt.Errorf("login session was saved but could not be read back: %w", err)
+	}
+	if stored.AccessToken != session.AccessToken || stored.RefreshToken != session.RefreshToken || !stored.ExpiresAt.Equal(session.ExpiresAt) {
+		return errors.New("login session could not be verified in credential storage")
+	}
+	return nil
 }
 
 func (a Auth) AccessToken(ctx context.Context) (string, error) {
@@ -181,8 +195,10 @@ func (a Auth) LoginBrowser(ctx context.Context, openBrowser func(string) error) 
 		}
 		select {
 		case result <- callbackResult{code: code}:
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			io.WriteString(w, "Authorization received. Return to the terminal to confirm login.")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Referrer-Policy", "no-referrer")
+			io.WriteString(w, `<!doctype html><html lang="en"><meta charset="utf-8"><title>Managed Agents login</title><p>Authorization received. You can close this tab.</p><script>history.replaceState(null, "", "/"); window.close();</script></html>`)
 		default:
 			http.Error(w, "Login already completed", http.StatusConflict)
 		}
@@ -204,7 +220,7 @@ func (a Auth) LoginBrowser(ctx context.Context, openBrowser func(string) error) 
 		if err != nil {
 			return err
 		}
-		return a.Store.Save(session)
+		return a.saveSession(session)
 	case <-wait.Done():
 		return fmt.Errorf("browser login timed out or was cancelled: %w", wait.Err())
 	}
