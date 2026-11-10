@@ -1,6 +1,6 @@
-# Managed Agents CLI
+# PolyAgent CLI
 
-A Go command-line client for [Managed Agents](https://managed-agents.colab.duke.edu/). It signs in as a user and manages that user's agent templates, sessions, and integration API keys.
+A Go command-line client for [PolyAgent](https://managed-agents.colab.duke.edu/). It signs in as a user and manages that user's agent templates, sessions, and integration API keys.
 
 ## Install
 
