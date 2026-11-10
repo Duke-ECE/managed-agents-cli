@@ -21,7 +21,7 @@ import (
 	"golang.org/x/term"
 )
 
-const usage = `Managed Agents CLI
+const usage = `PolyAgent CLI
 
 Usage:
   managed-agents login [--email address]       Browser GitHub login by default

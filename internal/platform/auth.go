@@ -185,7 +185,7 @@ func (a Auth) LoginBrowser(ctx context.Context, openBrowser func(string) error) 
 			case result <- callbackResult{err: errors.New(message)}:
 			default:
 			}
-			io.WriteString(w, "Managed Agents login failed. Return to the terminal.")
+			io.WriteString(w, "PolyAgent login failed. Return to the terminal.")
 			return
 		}
 		code := r.URL.Query().Get("code")
@@ -198,7 +198,7 @@ func (a Auth) LoginBrowser(ctx context.Context, openBrowser func(string) error) 
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("Referrer-Policy", "no-referrer")
-			io.WriteString(w, `<!doctype html><html lang="en"><meta charset="utf-8"><title>Managed Agents login</title><p>Authorization received. You can close this tab.</p><script>history.replaceState(null, "", "/"); window.close();</script></html>`)
+			io.WriteString(w, `<!doctype html><html lang="en"><meta charset="utf-8"><title>PolyAgent login</title><p>Authorization received. You can close this tab.</p><script>history.replaceState(null, "", "/"); window.close();</script></html>`)
 		default:
 			http.Error(w, "Login already completed", http.StatusConflict)
 		}
