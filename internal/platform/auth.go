@@ -97,7 +97,7 @@ func (a Auth) AccessToken(ctx context.Context) (string, error) {
 	session, err := a.Store.Load()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", errors.New("not logged in; run managed-agents login")
+			return "", errors.New("not logged in; run polyagent login")
 		}
 		return "", err
 	}
@@ -105,11 +105,11 @@ func (a Auth) AccessToken(ctx context.Context) (string, error) {
 		return session.AccessToken, nil
 	}
 	if session.RefreshToken == "" {
-		return "", errors.New("session expired; run managed-agents login")
+		return "", errors.New("session expired; run polyagent login")
 	}
 	refreshed, err := a.token(ctx, "refresh_token", map[string]string{"refresh_token": session.RefreshToken})
 	if err != nil {
-		return "", fmt.Errorf("session refresh failed; run managed-agents login: %w", err)
+		return "", fmt.Errorf("session refresh failed; run polyagent login: %w", err)
 	}
 	if err := a.Store.Save(refreshed); err != nil {
 		return "", err

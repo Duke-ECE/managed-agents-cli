@@ -48,7 +48,7 @@ func (a API) request(ctx context.Context, method, path string, body any) (*http.
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		defer response.Body.Close()
 		if response.StatusCode == http.StatusUnauthorized {
-			return nil, fmt.Errorf("authentication rejected; run managed-agents login: %w", responseError(response))
+			return nil, fmt.Errorf("authentication rejected; run polyagent login: %w", responseError(response))
 		}
 		return nil, responseError(response)
 	}

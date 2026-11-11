@@ -7,25 +7,22 @@ A Go command-line client for [PolyAgent](https://managed-agents.colab.duke.edu/)
 Install with Go 1.25 or newer:
 
 ```sh
-go install github.com/Duke-ECE/managed-agents-cli/cmd/managed-agents@latest
-managed-agents help
+go install github.com/Duke-ECE/managed-agents-cli/cmd/polyagent@v0.2.0
+polyagent help
 ```
 
-Prebuilt macOS, Linux, and Windows binaries are available on the [Releases page](https://github.com/Duke-ECE/managed-agents-cli/releases). Verify the archive against `SHA256SUMS` before installing it.
+Prebuilt macOS, Linux, and Windows binaries are available on the [Releases page](https://github.com/Duke-ECE/managed-agents-cli/releases). Earlier releases use the `managed-agents` command. Verify the archive against `SHA256SUMS` before installing it.
 
-If a configured Go mirror cannot verify the new module, use the official proxy for installation:
+During development, use `go run ./cmd/polyagent <command>` from this repository.
 
-```sh
-GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org go install github.com/Duke-ECE/managed-agents-cli/cmd/managed-agents@latest
-```
-
-During development, use `go run ./cmd/managed-agents <command>` from this repository.
+Existing scripts can keep using `managed-agents` via the legacy
+`cmd/managed-agents` entry point. Both commands share the same sign-in session.
 
 ## Sign in
 
 ```sh
-managed-agents login
-managed-agents whoami
+polyagent login
+polyagent whoami
 ```
 
 `login` opens GitHub OAuth in your browser. The CLI listens on `http://localhost:5173` for the one-time Supabase PKCE callback; that exact URL is already allow-listed for the platform. Close any Vite preview or other process using port 5173 before logging in. The callback page tries to close itself after authorization; if the browser blocks this, close the tab manually. The CLI exchanges the code for a user session and saves it in a hidden directory under your home folder. The browser does not hand its existing console session to the CLI; it performs a separate sign-in.
@@ -33,7 +30,7 @@ managed-agents whoami
 For an account with an email password:
 
 ```sh
-managed-agents login --email you@example.com
+polyagent login --email you@example.com
 ```
 
 The password is read without echo on an interactive terminal and is not stored. The access and refresh tokens are stored in `~/.managed-agents/session.json` (`~` means the OS user home directory). On macOS and Linux, the CLI creates the directory with mode `0700` and the file with mode `0600`; Windows uses the user profile ACL. `logout` revokes the current CLI refresh token when possible and removes the file. It does not sign out browser sessions. After upgrading from an older Keychain or config-directory build, run `managed-agents login` once to create the new file-based session.
@@ -41,29 +38,29 @@ The password is read without echo on an interactive terminal and is not stored. 
 ## Commands
 
 ```sh
-managed-agents whoami
-managed-agents account email new@example.com
-managed-agents account password
+polyagent whoami
+polyagent account email new@example.com
+polyagent account password
 
-managed-agents agents list
-managed-agents agents show <agent-id>
-managed-agents agents create --file agent.json
-managed-agents agents clone <agent-id>
-managed-agents agents archive <agent-id>
+polyagent agents list
+polyagent agents show <agent-id>
+polyagent agents create --file agent.json
+polyagent agents clone <agent-id>
+polyagent agents archive <agent-id>
 
-managed-agents sessions list
-managed-agents sessions show <session-id>
-managed-agents sessions rename <session-id> "New title"
-managed-agents sessions end <session-id>
-managed-agents sessions delete <session-id>
+polyagent sessions list
+polyagent sessions show <session-id>
+polyagent sessions rename <session-id> "New title"
+polyagent sessions end <session-id>
+polyagent sessions delete <session-id>
 
-managed-agents keys list
-managed-agents keys create "server integration"
-managed-agents keys revoke <key-id>
+polyagent keys list
+polyagent keys create "server integration"
+polyagent keys revoke <key-id>
 
-managed-agents chat --agent <agent-id> "Hello"
-managed-agents chat --session <session-id> "Continue"
-managed-agents logout
+polyagent chat --agent <agent-id> "Hello"
+polyagent chat --session <session-id> "Continue"
+polyagent logout
 ```
 
 The built-in Default assistant has agent ID `a0000000-0000-0000-0000-000000000001`. Using the platform LLM requires membership. Agent templates are immutable after creation: clone one to make a new private template, and archive your old template. Platform templates are read-only but cloneable. Create input uses the backend JSON shape, for example:
