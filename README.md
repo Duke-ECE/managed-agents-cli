@@ -50,6 +50,7 @@ polyagent agents archive <agent-id>
 
 polyagent sessions list
 polyagent sessions show <session-id>
+polyagent sessions config <session-id>
 polyagent sessions rename <session-id> "New title"
 polyagent sessions end <session-id>
 polyagent sessions delete <session-id>
@@ -59,11 +60,15 @@ polyagent keys create "server integration"
 polyagent keys revoke <key-id>
 
 polyagent chat --agent <agent-id> "Hello"
+polyagent chat --agent <agent-id> --thinking low "Solve this carefully"
 polyagent chat --session <session-id> "Continue"
+polyagent chat --session <session-id> --thinking off "Answer quickly this time"
 polyagent logout
 ```
 
 The built-in Default assistant has agent ID `a0000000-0000-0000-0000-000000000001`. Using the platform LLM requires membership. Agent templates are immutable after creation: clone one to make a new private template, and archive your old template. Platform templates are read-only but cloneable. Create input uses the backend JSON shape, for example:
+
+`--thinking` chooses `off`, `low`, `high`, `max`, or `provider_default` when creating a session. If omitted, the agent template setting applies. The choice stays with the session; a later `chat --session ... --thinking off` turns thinking off for one message only. The next message without the flag uses the saved mode again. `sessions config <id>` shows the frozen mode. Explicit `off`, `low`, `high`, and `max` currently require the official DeepSeek Flash endpoint; the API rejects unsupported model combinations.
 
 ```json
 {
@@ -71,6 +76,7 @@ The built-in Default assistant has agent ID `a0000000-0000-0000-0000-00000000000
   "description": "Answers support questions",
   "system_prompt": "Answer clearly and concisely.",
   "llm_mode": "platform_default",
+  "thinking_mode": "provider_default",
   "tools": []
 }
 ```

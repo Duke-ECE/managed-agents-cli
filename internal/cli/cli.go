@@ -30,9 +30,9 @@ Usage:
   polyagent account email <address>
   polyagent account password
   polyagent agents list|show <id>|create --file <path>|clone <id>|archive <id> [--yes]
-  polyagent sessions list|show <id>|rename <id> <title>|end <id>|delete <id> [--yes]
+  polyagent sessions list|show <id>|config <id>|rename <id> <title>|end <id>|delete <id> [--yes]
   polyagent keys list|create <name>|revoke <id> [--yes]
-  polyagent chat (--agent <id> | --session <id>) <message>
+  polyagent chat (--agent <id> [--thinking <mode>] | --session <id> [--thinking off]) <message>
 
 Environment overrides:
   MANAGED_AGENTS_API_URL, MANAGED_AGENTS_SUPABASE_URL,
@@ -253,7 +253,7 @@ func agents(ctx context.Context, args []string, api platform.API, in io.Reader, 
 
 func sessions(ctx context.Context, args []string, api platform.API, in io.Reader, out, errOut io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: polyagent sessions list|show|rename|end|delete")
+		return errors.New("usage: polyagent sessions list|show|config|rename|end|delete")
 	}
 	switch args[0] {
 	case "list":
@@ -270,6 +270,11 @@ func sessions(ctx context.Context, args []string, api platform.API, in io.Reader
 			return errors.New("usage: polyagent sessions show <id>")
 		}
 		return requestJSON(ctx, api, http.MethodGet, "/api/sessions/"+url.PathEscape(args[1])+"/messages?limit=50", nil, out)
+	case "config":
+		if len(args) != 2 {
+			return errors.New("usage: polyagent sessions config <id>")
+		}
+		return requestJSON(ctx, api, http.MethodGet, "/api/sessions/"+url.PathEscape(args[1])+"/config", nil, out)
 	case "rename":
 		if len(args) != 3 {
 			return errors.New("usage: polyagent sessions rename <id> <title>")
@@ -332,15 +337,30 @@ func chat(ctx context.Context, args []string, api platform.API, out, errOut io.W
 	flags.SetOutput(errOut)
 	agent := flags.String("agent", "", "existing accessible agent ID")
 	session := flags.String("session", "", "existing session ID")
+	thinking := flags.String("thinking", "", "session mode at creation; off may also disable one continued turn")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if (*agent == "") == (*session == "") || flags.NArg() != 1 {
-		return errors.New("usage: polyagent chat (--agent <id> | --session <id>) <message>")
+		return errors.New("usage: polyagent chat (--agent <id> [--thinking <mode>] | --session <id> [--thinking off]) <message>")
+	}
+	if *thinking != "" {
+		if *session != "" && *thinking != "off" {
+			return errors.New("continued sessions only accept --thinking off")
+		}
+		switch *thinking {
+		case "off", "low", "high", "max", "provider_default":
+		default:
+			return fmt.Errorf("invalid --thinking mode %q", *thinking)
+		}
 	}
 	id := *session
 	if id == "" {
-		data, err := api.JSON(ctx, http.MethodPost, "/api/sessions", map[string]string{"agent_id": *agent})
+		body := map[string]string{"agent_id": *agent}
+		if *thinking != "" {
+			body["thinking_mode"] = *thinking
+		}
+		data, err := api.JSON(ctx, http.MethodPost, "/api/sessions", body)
 		if err != nil {
 			return err
 		}
@@ -356,7 +376,11 @@ func chat(ctx context.Context, args []string, api platform.API, out, errOut io.W
 		id = created.SessionID
 		fmt.Fprintln(errOut, "Session:", id)
 	}
-	response, err := api.Stream(ctx, id, flags.Arg(0))
+	turnMode := ""
+	if *session != "" {
+		turnMode = *thinking
+	}
+	response, err := api.Stream(ctx, id, flags.Arg(0), turnMode)
 	if err != nil {
 		return err
 	}

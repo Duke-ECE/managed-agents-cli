@@ -74,8 +74,12 @@ func (a API) JSON(ctx context.Context, method, path string, body any) (json.RawM
 	return data, nil
 }
 
-func (a API) Stream(ctx context.Context, sessionID, message string) (*http.Response, error) {
-	return a.request(ctx, http.MethodPost, "/api/sessions/"+url.PathEscape(sessionID)+"/messages", map[string]string{"content": message})
+func (a API) Stream(ctx context.Context, sessionID, message, thinkingMode string) (*http.Response, error) {
+	body := map[string]string{"content": message}
+	if thinkingMode != "" {
+		body["thinking_mode"] = thinkingMode
+	}
+	return a.request(ctx, http.MethodPost, "/api/sessions/"+url.PathEscape(sessionID)+"/messages", body)
 }
 
 func (a Auth) UpdateUser(ctx context.Context, fields map[string]string) error {
