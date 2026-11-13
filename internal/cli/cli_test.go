@@ -120,8 +120,9 @@ func TestAgentCreateAndArchiveRoutes(t *testing.T) {
 	}
 }
 
-func TestChatThinkingOnlyOnCreation(t *testing.T) {
+func TestChatThinkingCreationAndOneTurnCancellation(t *testing.T) {
 	var createBody map[string]string
+	var streamBodies []map[string]string
 	var creates, streams int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -133,6 +134,11 @@ func TestChatThinkingOnlyOnCreation(t *testing.T) {
 			w.Write([]byte(`{"session_id":"s-1","thinking_mode":"low"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/sessions/s-1/messages":
 			streams++
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+			}
+			streamBodies = append(streamBodies, body)
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Write([]byte("event: done\ndata: {}\n\n"))
 		default:
@@ -154,6 +160,12 @@ func TestChatThinkingOnlyOnCreation(t *testing.T) {
 	}
 	if creates != 1 || streams != 2 {
 		t.Fatalf("continuation created=%d streamed=%d", creates, streams)
+	}
+	if err := run(context.Background(), []string{"chat", "--session", "s-1", "--thinking", "off", "quick reply"}, auth, api, strings.NewReader(""), &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if len(streamBodies) != 3 || streamBodies[0]["thinking_mode"] != "" || streamBodies[1]["thinking_mode"] != "" || streamBodies[2]["thinking_mode"] != "off" {
+		t.Fatalf("stream bodies = %#v", streamBodies)
 	}
 	if err := run(context.Background(), []string{"chat", "--session", "s-1", "--thinking", "high", "again"}, auth, api, strings.NewReader(""), &out, &errOut); err == nil {
 		t.Fatal("expected --thinking rejection on continuation")

@@ -32,7 +32,7 @@ Usage:
   polyagent agents list|show <id>|create --file <path>|clone <id>|archive <id> [--yes]
   polyagent sessions list|show <id>|config <id>|rename <id> <title>|end <id>|delete <id> [--yes]
   polyagent keys list|create <name>|revoke <id> [--yes]
-  polyagent chat (--agent <id> [--thinking <mode>] | --session <id>) <message>
+  polyagent chat (--agent <id> [--thinking <mode>] | --session <id> [--thinking off]) <message>
 
 Environment overrides:
   MANAGED_AGENTS_API_URL, MANAGED_AGENTS_SUPABASE_URL,
@@ -337,16 +337,16 @@ func chat(ctx context.Context, args []string, api platform.API, out, errOut io.W
 	flags.SetOutput(errOut)
 	agent := flags.String("agent", "", "existing accessible agent ID")
 	session := flags.String("session", "", "existing session ID")
-	thinking := flags.String("thinking", "", "new session mode: off|low|high|max|provider_default")
+	thinking := flags.String("thinking", "", "session mode at creation; off may also disable one continued turn")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if (*agent == "") == (*session == "") || flags.NArg() != 1 {
-		return errors.New("usage: polyagent chat (--agent <id> [--thinking <mode>] | --session <id>) <message>")
+		return errors.New("usage: polyagent chat (--agent <id> [--thinking <mode>] | --session <id> [--thinking off]) <message>")
 	}
 	if *thinking != "" {
-		if *session != "" {
-			return errors.New("--thinking is only valid when creating a session with --agent")
+		if *session != "" && *thinking != "off" {
+			return errors.New("continued sessions only accept --thinking off")
 		}
 		switch *thinking {
 		case "off", "low", "high", "max", "provider_default":
@@ -376,7 +376,11 @@ func chat(ctx context.Context, args []string, api platform.API, out, errOut io.W
 		id = created.SessionID
 		fmt.Fprintln(errOut, "Session:", id)
 	}
-	response, err := api.Stream(ctx, id, flags.Arg(0))
+	turnMode := ""
+	if *session != "" {
+		turnMode = *thinking
+	}
+	response, err := api.Stream(ctx, id, flags.Arg(0), turnMode)
 	if err != nil {
 		return err
 	}
