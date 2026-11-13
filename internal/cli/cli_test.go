@@ -119,3 +119,49 @@ func TestAgentCreateAndArchiveRoutes(t *testing.T) {
 		t.Fatalf("created=%v archived=%v", created, archived)
 	}
 }
+
+func TestChatThinkingOnlyOnCreation(t *testing.T) {
+	var createBody map[string]string
+	var creates, streams int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/sessions":
+			creates++
+			if err := json.NewDecoder(r.Body).Decode(&createBody); err != nil {
+				t.Error(err)
+			}
+			w.Write([]byte(`{"session_id":"s-1","thinking_mode":"low"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/sessions/s-1/messages":
+			streams++
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Write([]byte("event: done\ndata: {}\n\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	auth := platform.Auth{Config: platform.Config{APIURL: server.URL}, Store: testStore{platform.Session{AccessToken: "user-token", ExpiresAt: time.Now().Add(time.Hour)}}}
+	api := platform.API{Auth: auth}
+	var out, errOut bytes.Buffer
+	if err := run(context.Background(), []string{"chat", "--agent", "a-1", "--thinking", "low", "hello"}, auth, api, strings.NewReader(""), &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if createBody["agent_id"] != "a-1" || createBody["thinking_mode"] != "low" || creates != 1 || streams != 1 {
+		t.Fatalf("create=%v creates=%d streams=%d", createBody, creates, streams)
+	}
+	if err := run(context.Background(), []string{"chat", "--session", "s-1", "again"}, auth, api, strings.NewReader(""), &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if creates != 1 || streams != 2 {
+		t.Fatalf("continuation created=%d streamed=%d", creates, streams)
+	}
+	if err := run(context.Background(), []string{"chat", "--session", "s-1", "--thinking", "high", "again"}, auth, api, strings.NewReader(""), &out, &errOut); err == nil {
+		t.Fatal("expected --thinking rejection on continuation")
+	}
+	if err := run(context.Background(), []string{"chat", "--agent", "a-1", "--thinking", "medium", "hello"}, auth, api, strings.NewReader(""), &out, &errOut); err == nil {
+		t.Fatal("expected invalid mode rejection")
+	}
+	if creates != 1 {
+		t.Fatalf("invalid inputs created sessions: %d", creates)
+	}
+}
